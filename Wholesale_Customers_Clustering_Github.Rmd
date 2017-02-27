@@ -1,0 +1,273 @@
+---
+title: "Project for Introduction to Neural Networks"
+output:
+  pdf_document: default
+  html_notebook: default
+---
+#By Joos Korstanje
+
+In this project, I will work with customer data of a wholesale store. The data contains two categorical variables: Region and Channel (whether the client is retail or horeca). Then there are six continuous variables containing data on the annual spending of the client in this category.
+
+###Data information
+1)	FRESH: annual spending (m.u.) on fresh products (Continuous); 
+2)	MILK: annual spending (m.u.) on milk products (Continuous); 
+3)	GROCERY: annual spending (m.u.)on grocery products (Continuous); 
+4)	FROZEN: annual spending (m.u.)on frozen products (Continuous) 
+5)	DETERGENTS_PAPER: annual spending (m.u.) on detergents and paper products (Continuous) 
+6)	DELICATESSEN: annual spending (m.u.)on and delicatessen products (Continuous); 
+7)	CHANNEL: customers‚???T Channel - Horeca (Hotel/Restaurant/Caf√©) or Retail channel (Nominal) 
+8)	REGION: customers‚???T Region ‚???" Lisnon, Oporto or Other (Nominal) 
+Descriptive Statistics: 
+
+(Minimum, Maximum, Mean, Std. Deviation) 
+FRESH (	3, 112151, 12000.30, 12647.329) 
+MILK	(55, 73498, 5796.27, 7380.377) 
+GROCERY	(3, 92780, 7951.28, 9503.163) 
+FROZEN	(25, 60869, 3071.93, 4854.673) 
+DETERGENTS_PAPER (3, 40827, 2881.49, 4767.854) 
+DELICATESSEN (3, 47943, 1524.87, 2820.106) 
+
+REGION	Frequency 
+Lisbon	77 
+Oporto	47 
+Other Region	316 
+Total	440 
+
+CHANNEL	Frequency 
+Horeca	298 
+Retail	142 
+Total	440 
+
+##Part 1: Data preparation
+###Getting the data
+```{r}
+getwd()
+setwd("C:/Users/joos/Desktop/NN/Data")
+getwd()
+dat = read.csv("Wholesale_customers_data.csv", header = TRUE, sep = ",")
+str(dat)
+```
+
+The variable type of the two categorical variables has to be set to Factor.
+
+###Changing variable type
+```{r}
+data.fact=dat
+data.fact$Channel = as.factor(dat$Channel)
+data.fact$Region = as.factor(dat$Region)
+head(dat)
+```
+
+
+
+
+##Inspecting the data
+I will look whether there are missing values, the variances are equal, whether there is correlation, and whether there are outliers.
+
+```{r}
+table(is.na(data.fact))
+```
+This means that there are no missing values.
+
+The Covariance matrix and the Correlation matrix are shown here, in order to see if a Generative approach seems useful for this data. This is the case when there is much correlation and covariance.
+```{r}
+cov(data.fact[,-(1:2)])
+```
+
+```{r}
+cor(data.fact[,-(1:2)])
+```
+These two matrices can only work for continous variables. This already shows that a Generative algorithm could be beneficial.
+
+I will also look at this for the categorical variables.
+
+First, I will look at the number of observations in each category.
+```{r}
+table(data.fact$Channel)
+```
+
+```{r}
+table(data.fact$Region)
+```
+
+```{r}
+table(data.fact$Channel,data.fact$Region)
+```
+There seems to be quite some overrepresentation of Region 3. This could be an argument for using a Generatie algorithm.
+
+Another argument can be the variance per category. I will look at this now, using several boxplots.
+
+```{r, eval.after='fig.cap'}
+boxplot(data.fact[,-(1:2)])
+title("Overall Boxplot")
+```
+
+
+```{r, eval.after='fig.cap'}
+obsChnl1 = which(data.fact$Channel == 1)
+obsChnl2 = which(data.fact$Channel == 2)
+
+datChnl1 = data.fact[obsChnl1,]
+datChnl2 = data.fact[obsChnl2,]
+
+boxplot(datChnl1[,-(1:2)])
+title("Boxplot of spending of Horeca clients")
+```
+
+```{r, eval.after = 'fig.cap',resize.height=1}
+boxplot(datChnl2[,-(1:2)])
+title("Boxplot of spending by Retail clients")
+```
+
+
+
+
+```{r, eval.after = 'fig.cap'}
+obsRgn1 = which(data.fact$Region == 1)
+obsRgn2 = which(data.fact$Region == 2)
+obsRgn3 = which(data.fact$Region == 3)
+
+datRgn1 = data.fact[obsRgn1,]
+datRgn2 = data.fact[obsRgn2,]
+datRgn3 = data.fact[obsRgn3,]
+
+boxplot(datRgn1[,-(1:2)])
+title("Boxplot of spending in Region 1")
+```
+
+
+
+```{r, eval.after = 'fig.cap'}
+boxplot(datRgn2[,-(1:2)])
+title("Boxplot of spending in Region 2")
+```
+
+```{r, eval.after = 'fig.cap'}
+boxplot(datRgn3[,-(1:2)])
+title("Boxplot of Spending in Region 3")
+```
+
+Conclusion of this first part is that there is certainly a reason to look into Generative methods.
+
+
+##Modeling.
+Goal of project: Make a clustering on the clients (other than Horeca or Retail). This can be used to send personalized publicity / flyers / personalized discount.
+
+I will apply two methods: k-Means and a Gaussian Mixture Model (GMM). The GMM is expected to perform better, because there is correlation in the data and the variances of the different variables are not equal.
+
+The performance of the models will be assessed by creating a training and a test set. It would be best to assess performance using some external indices, like the efficiency of the budget of publicity. But I do not have such data. Therefore I will use some internal indices on the applciation of the model on the test set.
+
+http://stats.stackexchange.com/questions/21807/evaluation-measure-of-clustering-without-having-truth-labels
+
+###Splitting the data in training and test
+```{r}
+set.seed=12345 #For reproducibility
+train.samples = sample(nrow(data.fact), 300)
+```
+
+###k-Means
+First do hierarchical clustering to decide on the k.
+```{r}
+d=dist(data.fact)
+h.clust=hclust(d)
+```
+
+```{r}
+names(h.clust)
+```
+```{r}
+plot(h.clust)
+```
+
+Following the dendrogram, I will use 8 classes, because there seems to be a larger gap between theses separations.
+
+I will now do the k-Means.
+
+```{r}
+kmeans.fit=kmeans(data.fact,8)
+```
+
+I will make a plot, by using the Principal components.
+
+```{r}
+library(cluster)
+clusplot(data.fact, kmeans.fit$cluster, color=TRUE, lines=0)
+```
+
+fpc for making a centroid plot against 1st two discriminant functions.
+
+I had to remove the categorical variables in this plot.
+```{r}
+#install.packages("fpc")
+library(fpc)
+```
+
+```{r}
+#getAnywhere(plotcluster)
+plotcluster(data.fact[,-c(1:2)], kmeans.fit$cluster)
+```
+
+```{r}
+names(kmeans.fit)
+```
+
+```{r}
+kmeans.fit$tot.withinss
+kmeans.fit$betweenss
+```
+
+
+
+##Gaussian Mixture Model
+Now I will do the Gaussian Mixture Model:
+
+```{r}
+#install.packages("mclust")
+library(mclust)
+```
+
+Fittign the GMM
+```{r}
+GMM.fit = Mclust(data.fact)
+```
+
+```{r}
+summary(GMM.fit)
+```
+
+```{r}
+names(GMM.fit)
+```
+
+Seeing the results. Four clusters have been made.
+```{r}
+GMM.fit$classification
+```
+
+```{r}
+plot(GMM.fit, what="BIC")
+```
+```{r}
+plot(GMM.fit, what="classification")
+```
+
+```{r}
+plot(GMM.fit, what="uncertainty")
+```
+
+```{r}
+plot(GMM.fit, what="density")
+```
+
+For the question of tho which clusters of clients to send which publicity, looking at the cluster means gives more information.
+```{r}
+GMM.fit$parameters$mean
+```
+
+
+#Conclusion:
+In this paper, two clustering methods have been applied. First was a k-Means with k based on hierarchical clustering. Second was a Gaussian Mixture Model.
+In a practical situation, I would have had more information on which results were more valuavle in a company setting, which I do not have in this case. Since I described the use of having several types of publicity, I would choose for a solution with not too many clusters. So this would be an argument to try again k-means with 4 clusters.
+However, in this situation, there is quite a lot of differences in sample sizes between groups in the categorical variables and at the same time there is quite some correlation between the  variables. This makes that I have more faith in the Gaussian Mixture Model in the end. Therefore, this solution seems better.
+
+
